@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+data/secrets/*.json
+*.pem
+*.key
+
+# CARLA
+CARLA_0.9.16/
+CarlaUE4/
+demos/carla_root.txt
+
+# Demo outputs
+demos/recordings/**
+!demos/recordings/.gitkeep
+demos/telemetry/**
+!demos/telemetry/.gitkeep
+
+# Local
+local/
+Pre-release/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

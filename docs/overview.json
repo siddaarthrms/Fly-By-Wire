@@ -1,0 +1,389 @@
+{
+  "title": "Fly-By-Wire",
+  "subtitle": "I Made a Fly Drive a Car",
+  "version": "2026-07-21",
+  "scope": "FlyWire / Drosophila connectome pipeline",
+  "executive_one_liner": "We took a proofread Drosophila connectome (FlyWire), traced geometry through the graph (3D neuron positions → 30×30 retinotopic grid), and run live control as pure weighted geometric projection — brightness at mapped coordinates × synapse counts — with ~1,555 FLOPs/frame and no neural network training at inference time.",
+  "thesis": {
+    "headline": "geometry is the precursor to intelligence",
+    "claims": [
+      "Structure + placement + weights from anatomy, not learned embeddings",
+      "Computation is literally geometric projection",
+      "The hard part was finding the right coordinates in connectome space — not training"
+    ]
+  },
+  "compute": {
+    "model_only_flops_per_frame": 1555,
+    "model_only_mflops_at_30hz": 0.047,
+    "notes": "Excludes CARLA rendering, camera ingest, looming controller, and Python overhead"
+  },
+  "phases": [
+    {
+      "id": "phase_0",
+      "name": "Entering the Connectome (FlyWire / CAVE)",
+      "data_source": {
+        "datastack": "flywire_fafb_public",
+        "materialization_version": 783,
+        "client": "CAVEclient",
+        "auth_token_path": "data/secrets/flywire_token.json"
+      },
+      "annotation_table": {
+        "used": "hierarchical_neuron_annotations",
+        "not_available_on_public_stack": "pni_drosophila_v6_v0"
+      },
+      "scripts": [
+        {
+          "path": "scripts/fetch_power_neurons.py",
+          "role": "Query GF / DNg power neurons"
+        },
+        {
+          "path": "scripts/export_brake_synapses.py",
+          "role": "DNg03 upstream brake graph export"
+        }
+      ],
+      "private_regen": "Full connectome export and calibration pipeline are not shipped"
+    },
+    {
+      "id": "phase_1",
+      "name": "Topology Tracing: Who Drives Steering?",
+      "description": "Graph-geometry discovery: walk upstream in synapse space from descending motor neurons to visual and motion layers.",
+      "steps": [
+        {
+          "step": "A",
+          "name": "Anchor on descending steering neurons",
+          "detail": "Start from DNx02 cell type in hierarchical_neuron_annotations → pt_root_id list"
+        },
+        {
+          "step": "B",
+          "name": "Walk upstream in synapse space",
+          "detail": "strong_upstream(post_ids) = pres with synapse count > threshold onto those posts",
+          "tables": ["synapses_nt_v1", "valid_connection_v2"]
+        },
+        {
+          "step": "C",
+          "name": "Layered hops",
+          "layers": [
+            "DNx02 (motor descending layer)",
+            "Supervisors (strong upstream, count > 5)",
+            "Visual layer (another hop)",
+            "Motion layer — T4/T5-like population (threshold > 3), referred to as motion GPU"
+          ]
+        },
+        {
+          "step": "D",
+          "name": "Fetch 3D geometry",
+          "detail": "Query proofread_neurons for pt_position (x, y, z) of motion-layer IDs",
+          "presentation_point": "Intelligence here is literally where neurons sit in space, not a latent vector learned offline"
+        }
+      ]
+    },
+    {
+      "id": "phase_2",
+      "name": "Retinotopy: 3D Connectome → 30×30 Fly Eye Grid",
+      "pipeline": [
+        "Min-max normalize x,y from connectome coordinates → [0, 1]",
+        "Quantize to 30×30 integer grid (0..29)",
+        "Save pt_root_id, grid_x, grid_y"
+      ],
+      "artifacts": [
+        {
+          "path": "data/mappings/fly_eye_grid_full.csv",
+          "stage": "production",
+          "approx_neuron_count": 2244,
+          "note": "Only retinotopy map shipped; early lineage files are regen-only"
+        }
+      ],
+      "runtime_operation": "brightness_at_neuron_i = grid[grid_y[i], grid_x[i]]",
+      "presentation_point": "Each neuron sees one pixel of a downsampled world — geometry binds vision to circuit"
+    },
+    {
+      "id": "phase_3",
+      "name": "Synaptic Weight Matrix Export",
+      "export_logic": "For all discovered brain IDs, pull (pre, post, n_syn, NT scores) and collapse NT argmax → nt_type",
+      "artifacts": [
+        {
+          "path": "data/models/fly_pilot_production_v1.csv",
+          "role": "Production weights loaded by CARLA pilot (only model CSV shipped)"
+        },
+        {
+          "path": "data/models/MANIFEST.md",
+          "role": "Provenance and calibration story for shipped circuit"
+        }
+      ],
+      "weight_semantics": {
+        "synapse_count": "Connection strength from anatomy, not learned",
+        "computation": "Σ brightness(pre) × synapse_count(pre→target)",
+        "interpretation": "Sparse geometric inner product from retina to motor command neurons"
+      }
+    },
+    {
+      "id": "phase_4",
+      "name": "Steering Pair Selection",
+      "description": "Geometry validated on training video, not backprop policy learning",
+      "steer_neuron_ids": {
+        "RIGHT_STEER_ID": "720575940633816986",
+        "LEFT_STEER_ID": "720575940625653029"
+      },
+      "discovery": {
+        "method": "Enumerate DNx02 pairs; score differential push on straight-road calibration footage; pick strongest pair"
+      },
+      "validation": {
+        "script": "src/neural_projector.py",
+        "pipeline": "Video → gray → 30×30 INTER_AREA → right_push, left_push, steering bias",
+        "note": "Uses shipped production weights + grid; calibration footage is local-only"
+      },
+      "production_sparse_fan_in": {
+        "right_push_mapped_synapses": 3,
+        "left_push_mapped_synapses": 3
+      }
+    },
+    {
+      "id": "phase_5",
+      "name": "Calibration as Geometric Surgery",
+      "description": "Structural edits on the connectome graph, not gradient descent training",
+      "steps": [
+        "Prune synapses into LEFT while straight-driving pixels are active",
+        "Mirror grid_x and duplicate LEFT pathway to RIGHT for binocular symmetry",
+        "Boost synapses into the command layer for usable drive",
+        "Apply tiny left-side gain to zero straight-road bias → fly_pilot_production_v1.csv"
+      ],
+      "private_regen": "Calibration step scripts and footage are not shipped",
+      "honest_caveat": "Engineered calibration (R0 offset, gain, mirror duplication). Still geometry-first, but not pure connectome-as-is."
+    },
+    {
+      "id": "phase_6",
+      "name": "Runtime Fly Brain",
+      "module": "src/fly_brain.py",
+      "input": "(30, 30) uint8 grayscale",
+      "channels": {
+        "steering": {
+          "equations": {
+            "right_push": "Σ b[i] * w_r[i]",
+            "left_push": "Σ b[i] * w_l[i]"
+          },
+          "bridge_module": "src/carla_bridge.py",
+          "bridge_equations": {
+            "bias": "1.01 * right_push - left_push - 0.01 * R0",
+            "steer": "clip(bias * 2.0, deadzone, [-1, 1])"
+          },
+          "constants": {
+            "RIGHT_PUSH_SCALE_W": 1.01,
+            "R0_RIGHT_MEAN": 6.6414,
+            "GAIN": 2.0,
+            "STEER_DEADZONE": 0.002
+          }
+        },
+        "brake": {
+          "source": "fly_brake_weights.csv",
+          "targets": "DNg03 upstream synapses",
+          "mapped_inputs_in_eye_grid": 47,
+          "equation": "brake_drive = 1 - weighted_mean_brightness (dark = loom/brake)"
+        },
+        "throttle": {
+          "source": "fly_throttle_weights.csv",
+          "targets": "DNg01/02 subtypes (regex DNg0[12].*, 35 neurons, 30581 synapses export)",
+          "mapped_inputs_in_eye_grid": 275,
+          "equation": "throttle_drive = weighted_mean_brightness"
+        }
+      }
+    },
+    {
+      "id": "phase_7",
+      "name": "30×30 Input Path",
+      "canonical_module": "src/vision_ingest.py",
+      "pipeline": "CARLA BGRA → BGR → grayscale → resize(30, 30, INTER_AREA) → uint8 grid",
+      "parity": "Same as neural_projector.py on training video"
+    },
+    {
+      "id": "phase_8",
+      "name": "Closed-Loop CARLA Pilot",
+      "module": "src/carla_pilot.py",
+      "loop": "Camera → 30×30 grid → FlyBrain → steer/brake/throttle drives → CARLA VehicleControl",
+      "longitudinal_modes": [
+        {
+          "mode": "default",
+          "brake": "max(looming, neuron_brake)",
+          "throttle": "cruise / cut on brake"
+        },
+        {
+          "mode": "--neuron-only-brake",
+          "brake": "DNg03 only",
+          "throttle": "constant unless braking"
+        },
+        {
+          "mode": "--use-neuron-throttle",
+          "brake": "as above",
+          "throttle": "base * throttle_neuron * motion_flux"
+        },
+        {
+          "mode": "--pure-neural-longitudinal",
+          "brake": "DNg03 only",
+          "throttle": "neuron throttle × flux only; looming longitudinal ignored for control"
+        }
+      ],
+      "looming_controller": {
+        "module": "src/carla_bridge.py LoomingController",
+        "role": "Non-connectome geometric fallback on same 30×30 grid (center/approach ROI statistics)",
+        "presentation_note": "Engineered safety geometry — distinguish from FlyWire-derived paths in talk"
+      },
+      "debug_lessons": [
+        {
+          "issue": "False brake on left curve",
+          "cause": "b_drive drift vs fixed baseline (b_loom=0, b_neuron>0)",
+          "fix": "EMA baseline tracking via --brake-baseline-alpha"
+        },
+        {
+          "issue": "Car stopped before wall in loom test",
+          "cause": "Physics collision with static prop collider (brake=0, loom=0)",
+          "fix": "Not controller — hidden collision envelope on streetbarrier props"
+        },
+        {
+          "issue": "Throttle stuck ~0.28",
+          "cause": "thr = 0.30 * t_neuron(~0.92) * flux_factor(~1.0) ≈ 0.28",
+          "fix": "Expected stable math, not a bug"
+        }
+      ]
+    }
+  ],
+  "artifacts": {
+    "data_mappings_fly_eye_grid_full_csv": "Neuron ID → (grid_x, grid_y) retinotopy",
+    "data_models_fly_pilot_production_v1_csv": "Steering connectome weights",
+    "fly_brake_weights_csv": "DNg03 upstream synapses",
+    "fly_throttle_weights_csv": "DNg01/02 upstream synapses",
+    "src_fly_brain_py": "Geometric forward model",
+    "src_neural_projector_py": "Offline video validation",
+    "src_vision_ingest_py": "Live 30×30 artificial retina ingest",
+    "src_carla_pilot_py": "Full closed-loop driver",
+    "scripts_fetch_power_neurons_py": "Connectome queries for power neurons",
+    "data_models_MANIFEST_md": "Shipped circuit provenance and calibration story"
+  },
+  "end_state": {
+    "summary": "Three-channel fly-inspired controller fed by one 30×30 geometric retina exported from real FlyWire synapse geometry",
+    "channels": {
+      "lateral": "Connectome steering (RIGHT/LEFT descending targets)",
+      "brake": "DNg03 upstream geometry (darkness-biased)",
+      "throttle": "DNg01/02 upstream geometry (brightness-biased) × motion flux"
+    }
+  },
+  "presentation": {
+    "duration_minutes": "10-12",
+    "slides": [
+      {
+        "number": 1,
+        "title": "Thesis",
+        "content": "Intelligence = geometry of connections + geometry of positions. No transformer. No RL at inference. Anatomy is the model."
+      },
+      {
+        "number": 2,
+        "title": "Data",
+        "content": "FlyWire proofread connectome → v783 materialization → synapse tables with NT context"
+      },
+      {
+        "number": 3,
+        "title": "Graph Walk",
+        "content": "DNx02 → supervisors → visual → motion (T4/T5 layer). Show hops as nodes/edges."
+      },
+      {
+        "number": 4,
+        "title": "Retinotopic Projection",
+        "content": "3D (x,y,z) → normalized → 30×30 grid. One slide with grid overlay concept."
+      },
+      {
+        "number": 5,
+        "title": "The Compute",
+        "content": "motor_signal = Σ pixel_brightness(neuron_location) × synapse_count. ~1.5k ops/frame."
+      },
+      {
+        "number": 6,
+        "title": "Steering Discovery",
+        "content": "Steering pair search on straight/left videos; fixed RIGHT/LEFT IDs."
+      },
+      {
+        "number": 7,
+        "title": "Calibration as Geometry Edits",
+        "content": "Mirror eye, gain injection, symmetry factor — not gradient descent."
+      },
+      {
+        "number": 8,
+        "title": "Longitudinal Expansion",
+        "content": "DNg03 brake + DNg01/02 throttle from separate connectome exports."
+      },
+      {
+        "number": 9,
+        "title": "Live Demo",
+        "content": "CARLA: connectome steering + optional pure-neural longitudinal modes. Use demos/ launchers."
+      },
+      {
+        "number": 10,
+        "title": "Honest Boundaries",
+        "content": "Sparse steer fan-in; engineered calibration; partial eye-map overlap; core behavior still from connectome geometry."
+      }
+    ],
+    "punchlines_for_execs": [
+      "We imported a real brain graph and drove a car with it.",
+      "Inference is a geometric dot product, not a billion-parameter model.",
+      "The hard part was finding the right coordinates in connectome space — not training."
+    ],
+    "demo_talking_points": [
+      "Point to logs: r_push, l_push, steer, b_drive, t_drive",
+      "Show mode flags: pure neural vs fused",
+      "Wall test: distinguish physics collision stop (brake=0) vs controller stop (b_neuron>0 or b_loom>0)",
+      "Mention FLOPs vs CARLA rendering cost (model is negligible)"
+    ]
+  },
+  "demos_folder": {
+    "path": "demos/",
+    "readme": "demos/README.txt",
+    "recordings_dir": "demos/recordings/",
+    "launchers": [
+      {
+        "file": "01_Cruising_Record.bat",
+        "preset": "straight",
+        "article_name": "Cruising",
+        "auto_stop_seconds": 22
+      },
+      {
+        "file": "02_Turning_Record.bat",
+        "preset": "left_curve",
+        "article_name": "Turning",
+        "auto_stop_seconds": 32
+      },
+      {
+        "file": "03_ObstacleAvoidance_Record.bat",
+        "preset": "straight_cone",
+        "article_name": "Obstacle Avoidance",
+        "auto_stop_seconds": 18
+      },
+      {
+        "file": "04_RapidBraking_Record.bat",
+        "preset": "loom_wall",
+        "article_name": "Rapid Braking",
+        "auto_stop_seconds": 14
+      },
+      {
+        "file": "05_BiologicalBraking_Record.bat",
+        "preset": "loom_wall",
+        "article_name": "Biological Braking",
+        "flags": ["--pure-neural-longitudinal"],
+        "auto_stop_seconds": 18
+      },
+      {
+        "file": "Open.bat",
+        "role": "Open recordings and telemetry folders"
+      }
+    ],
+    "recording": {
+      "format": "MP4 (mp4v)",
+      "resolution": "1280x720",
+      "fps": "~30",
+      "camera": "Chase camera attached behind vehicle (matches spectator-style view)",
+      "cli_flags": [
+        "--record-video",
+        "--record-max-seconds",
+        "--record-w",
+        "--record-h"
+      ],
+      "module": "src/demo_recorder.py"
+    }
+  }
+}

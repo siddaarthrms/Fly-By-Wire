@@ -1,0 +1,4 @@
+# CI / contributor tools (not required to run demos)
+-r requirements.txt
+pytest>=8.0
+ruff>=0.6

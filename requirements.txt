@@ -1,0 +1,14 @@
+# Fly-By-Wire runtime (pin versions when publishing)
+numpy>=1.24
+opencv-python>=4.8
+pandas>=2.0
+
+# Connectome export (optional — only for regenerating weights from FlyWire)
+caveclient>=5.0
+
+# Telemetry circuit renders (scripts/render_circuit_lightup.py)
+matplotlib>=3.7
+
+# CARLA Python API: install from your CARLA release, e.g.
+#   pip install <CARLA_ROOT>/PythonAPI/carla/dist/carla-*-py3*.whl
+# Not listed here because wheel name is platform-specific.

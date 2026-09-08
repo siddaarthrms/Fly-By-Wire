@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+title: "Fly-By-Wire"
+message: "If you use this software, please cite both the FlyWire connectome paper and this repository."
+type: software
+authors:
+  - family-names: Ramasubramanian
+    given-names: Siddaarth
+    email: siddaarth.rs@gmail.com
+repository-code: "https://github.com/siddaarthrms/Fly-By-Wire"
+url: "https://github.com/siddaarthrms/Fly-By-Wire"
+license: MIT
+keywords:
+  - connectome
+  - flywire
+  - drosophila
+  - carla
+  - computational-neuroscience
+  - retinotopy
+abstract: >-
+  Fly-By-Wire: a fruit fly connectome autonomously driving a car. A 30×30
+  artificial retina and synapse-weighted sums (~1,555 FLOPs/frame) control a
+  CARLA vehicle. No neural network is trained at inference time.
+preferred-citation:
+  - type: article
+    title: "Neuronal wiring diagram of an adult brain"
+    authors:
+      - family-names: Dorkenwald
+        given-names: Alexander
+      - family-names: Matsliah
+        given-names: Arie
+      - family-names: Akram
+        given-names: Amina
+    year: 2024
+    doi: 10.1038/s41586-024-07558-y
+    journal: Nature
+    notes: "FlyWire connectome — primary anatomical data source"
+references:
+  - type: article
+    title: "Neuronal wiring diagram of an adult brain"
+    authors:
+      - family-names: Dorkenwald
+        given-names: Alexander
+      - family-names: Matsliah
+        given-names: Arie
+      - family-names: Akram
+        given-names: Amina
+    year: 2024
+    doi: 10.1038/s41586-024-07558-y
+    notes: "FlyWire connectome — primary data source"

@@ -1,0 +1,5 @@
+# Local CARLA install path (one line, no quotes). Gitignored — not shipped.
+# Copy this file to carla_root.txt and edit, or run Set_CARLA_Root.bat
+#
+# Example:
+# C:\path\to\CARLA_0.9.16
